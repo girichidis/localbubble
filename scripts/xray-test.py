@@ -12,7 +12,7 @@ def _plot_slice(ds, field, vmin, vmax, fname):
     p.set_zlim(field,vmin,vmax)
     p.save(fname)
 
-for f in ["SILCC_hdf5_plt_cnt_1080"]: #, "SILCC_hdf5_plt_cnt_3000"]:
+for f in ["/home/erea/data/B6-1pc/SILCC_hdf5_plt_cnt_1080"]: #, "SILCC_hdf5_plt_cnt_3000"]:
     
     plt = f[-4:]
     print(plt)
@@ -24,8 +24,8 @@ for f in ["SILCC_hdf5_plt_cnt_1080"]: #, "SILCC_hdf5_plt_cnt_3000"]:
     ds.add_field(('gas', 'H_nuclei_density'), _nuclei_density, \
                  sampling_type="local", units="cm**(-3)", force_override=True)
 
-    yt.add_xray_emissivity_field(ds, 0.3, 2, metallicity=1.0, \
-                                 data_dir="/Users/girichidis/Physics/Tables/yt-python/")
+    yt.add_xray_emissivity_field(ds, 0.5, 2, metallicity=1.0, \
+                                 data_dir="/home/erea/data/xray-tables/")
     
     # coldens
     _plot_proj(ds, field=("gas", "density"), vmin = 1e-5, vmax = 1e-1, fname=plt+"-Proj-z-dens.pdf")
