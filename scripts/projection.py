@@ -106,8 +106,13 @@ for files in args.files:
 
     # loop over cells and fill HP map
     print("loop over cells: ", N0[rank], "to", N1[rank])
+    Ncell = N1[rank] - N0[rank]
 
     for i in range(N0[rank], N1[rank]):
+
+        if rank == 0:
+            if (((i/Ncell*10.) % 1) > (((i+1)/Ncell*10.) % 1)):
+                print(int(np.round((i+1)/Ncell*100, 0)), "% done")
 
         Mtot_loc = Mtot_loc + sp[("gas","cell_mass")][i].v
         pixels = hp.query_disc(nside, [vec_norm_x[i], vec_norm_y[i], vec_norm_z[i]], angle[i], inclusive=True,)  
