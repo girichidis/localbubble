@@ -16,8 +16,8 @@ size = comm.Get_size()
 
 nside = 64
 
-min=20.
-max=30.
+min=18.
+max=32.
 
 pc = 3.085678e+18
 kpc = 1e3 * pc
@@ -33,7 +33,7 @@ c = ([cx, cy, cz], "pc")          # new yt version
 c = [cx*pc, cy*pc, cz*pc] # old yt version
 #c = [0.0*pc, 0.0*pc, 0.0*pc] # old yt version
 
-Rmax_pc = 120.0
+Rmax_pc = 180.0
 
 # parse command line arguments
 parser = argparse.ArgumentParser(description='cmd line args')
@@ -169,10 +169,17 @@ for files in args.files:
     if rank == 0:
         lmin = np.log10(np.min(im_glb))
         lmax = np.log10(np.max(im_glb))
-        hp.mollview(np.log10(im_glb), return_projected_map=True, min=18, max=33)
+        
+        fig = plt.figure(figsize=(10, 5))
+        hp.mollview(np.log10(im_glb), return_projected_map=True, min=min, max=max, title="X-ray Luminosity Map (0.5-2 keV) - Time: " + str(t) + " Myr - Radius: " + str(Rmax_pc) + " pc", cbar=False)
         hp.graticule()
 
-    
-        plt.savefig(files+"-mollweide-x_lum_"+ str(Rmax_pc) +"_weighted.pdf", bbox_inches="tight")
+        # Create a custom colorbar
+        ax = plt.gca()
+        image = ax.get_images()[0]
+        cbar = fig.colorbar(image, ax=ax, orientation='vertical', shrink=0.8)
+        cbar.set_label('log(X-ray Luminosity (erg/s/sr))', rotation=270, labelpad=20)
+
+        plt.savefig(files + "-mollweide-x_lum_" + str(Rmax_pc) + "_weighted.pdf", bbox_inches="tight")
         #plt.savefig(files+"-mollweide-x_lum_"+ str(Rmax_pc) +".png", bbox_inches="tight", dpi=300)
         
