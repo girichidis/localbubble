@@ -19,6 +19,7 @@ nside = 64
 min=18.
 max=32.
 
+
 pc = 3.085678e+18
 kpc = 1e3 * pc
 
@@ -33,7 +34,8 @@ c = ([cx, cy, cz], "pc")          # new yt version
 c = [cx*pc, cy*pc, cz*pc] # old yt version
 #c = [0.0*pc, 0.0*pc, 0.0*pc] # old yt version
 
-Rmax_pc = 180.0
+
+Rmax_pc = 120.0
 
 # parse command line arguments
 parser = argparse.ArgumentParser(description='cmd line args')
@@ -181,5 +183,4 @@ for files in args.files:
         cbar.set_label('log(X-ray Luminosity (erg/s/sr))', rotation=270, labelpad=20)
 
         plt.savefig(files + "-mollweide-x_lum_" + str(Rmax_pc) + "_weighted.pdf", bbox_inches="tight")
-        #plt.savefig(files+"-mollweide-x_lum_"+ str(Rmax_pc) +".png", bbox_inches="tight", dpi=300)
-        
+
