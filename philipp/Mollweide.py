@@ -3,7 +3,7 @@ import healpy as hp
 import h5py
 import matplotlib.pyplot as plt
 import yt
-from mpi4py import MPI
+#from mpi4py import MPI
 import argparse
 from tqdm import tqdm
 import pickle
@@ -16,6 +16,10 @@ Msun = c.M_sun.cgs.value
 G = c.G.cgs.value
 Myr = u.Myr.in_units("s")
 
+# Macbook
+dat_path = "/Users/girichidis/Physics/Tables/yt-python/"
+# helix
+dat_path = "/home/hd/hd_hd/hd_ud081/work/SILCC/2018-SILCC-Clouds/localbubble/tables/"
 
 parser = argparse.ArgumentParser(description='cmd line args')
 parser.add_argument('files', nargs='+', help='files')
@@ -85,9 +89,7 @@ for files in args.files:
     ds.add_field(("gas", "electron_density_squared"), function=_electron_density_squared, \
                 sampling_type="local", units="cm**-6", force_override=True)
 
-    yt.add_xray_emissivity_field(ds, 0.5, 2, metallicity=1.0, \
-                                data_dir="/Users/girichidis/Physics/Tables/yt-python/")
-
+    yt.add_xray_emissivity_field(ds, 0.5, 2, metallicity=1.0, data_dir=dat_path)
 
     # loop over radii
     #radii = np.linspace(args.rad_min_pc, args.rad_max_pc, args.Nrad_pc)
@@ -219,6 +221,9 @@ for files in args.files:
     # prepare the data field to write to disk
     data = {}
 
+    data["simtime"] = ds.current_time.v
+    data["simtime_Myr"] = ds.current_time.in_units("Myr").v
+    
     for name, field, norm in zip(["coldens", "coldens2", "Xraylum", "Xrayflx", "emmeasure", "radius", "bubble_open"], \
                             [coldens_map, coldens_map2, Xraylum_map, Xrayflx_map, emmeasure_map, radius_map, bubble_open_map], \
                             [True, True, True, True, True, False, False]):
