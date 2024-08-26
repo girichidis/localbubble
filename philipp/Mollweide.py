@@ -192,7 +192,7 @@ for files in args.files:
             Xrayflx_map[idx2]   += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v / len(pix) / (4. * np.pi * rad_ctr[idx[i]]**2)
             emmeasure_map[idx2] += sp[("gas", "electron_density_squared")][idx[i]].v * dx[idx[i]]
 
-            f_idx_pix   = len(idx2) / len(pix)
+            f_idx_pix   = len(idx2[0]) / len(pix)
             total_mass += sp[("gas", "cell_mass")][idx[i]].v * f_idx_pix
             total_lumi += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v * f_idx_pix
             total_flux += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v * f_idx_pix / (4. * np.pi * rad_ctr[idx[i]]**2)
@@ -206,7 +206,7 @@ for files in args.files:
             Xraylum_map[:]   += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v / NPIX
             Xrayflx_map[:]   += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v / NPIX / (4. * np.pi * args.rad_res**2)
             emmeasure_map[:] += sp[("gas", "electron_density_squared")][idx[i]].v * dx[idx[i]]
-            
+
             total_mass += sp[("gas", "cell_mass")][idx[i]].v
             total_lumi += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v
             total_flux += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v / (4. * np.pi * args.rad_res**2)
@@ -223,14 +223,17 @@ for files in args.files:
 
     data["simtime"] = ds.current_time.v
     data["simtime_Myr"] = ds.current_time.in_units("Myr").v
-    
+
     for name, field, norm in zip(["coldens", "coldens2", "Xraylum", "Xrayflx", "emmeasure", "radius", "bubble_open"], \
                             [coldens_map, coldens_map2, Xraylum_map, Xrayflx_map, emmeasure_map, radius_map, bubble_open_map], \
                             [True, True, True, True, True, False, False]):
-        
+
         fig = plt.figure(figsize=(10, 5))
         if norm:
-            field = np.log10(field)
+            plt_field = np.log10(field).copy()
+        else:
+            plt_field = field.copy()
+
         hp.mollview(field, return_projected_map=True, title=name, cbar=False)
         hp.graticule()
 
