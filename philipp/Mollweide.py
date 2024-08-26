@@ -234,7 +234,7 @@ for files in args.files:
         else:
             plt_field = field.copy()
 
-        hp.mollview(field, return_projected_map=True, title=name, cbar=False)
+        hp.mollview(plt_field, return_projected_map=True, title=name, cbar=False)
         hp.graticule()
 
         #hp.write_map(f"{args.odir_data}/{files}-r{R:.1f}-{f}.fits", locals()[f"{f}_map"], overwrite=True)
