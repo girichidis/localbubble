@@ -2,28 +2,34 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-global_times = []
-global_Xlum = []
-global_Xlum2 = []
-
 def _read(pickle_path):
     with open(pickle_path, 'rb') as f:
         data = pickle.load(f)
-    return data["simtime_Myr"], data["total_mass"]
+    return data["simtime_Myr"], data["total_lumi"]
 
-for file_no in range(1000,1100,2):
-    print(file_no)
-    pickle_path = "data-float32/SILCC_hdf5_plt_cnt_"+str(file_no).zfill(4)+"-r0150-c001670-data-float32.pkl"
-    pickle_path2 = "data-float32/SILCC_hdf5_plt_cnt_"+str(file_no).zfill(4)+"-r0150-c000050-data-float32.pkl"
+cmap = plt.get_cmap('twilight')
+colors = cmap(np.linspace(0.1,0.9,6))
 
-    t, L = _read(pickle_path)
-    global_times.append(t)
-    global_Xlum.append(L)
-    t, L2 = _read(pickle_path2)
-    global_Xlum2.append(L2)
-    print(L, L2)
 fig, ax = plt.subplots(figsize=(10,5))
-ax.semilogy(global_times, global_Xlum, label="1e20")
-ax.semilogy(global_times, global_Xlum2, label="3e19")
+
+cd_names  = ["c000050", "c000100", "c000167", "c000500", "c001000", "c001670"]
+cd_labels = ["3e19", "6e19", "1e20", "3e20", "6e20", "1e21"]
+for i, cd, label in zip(range(6), cd_names, cd_labels):
+    print(cd)
+    global_times = []
+    global_Xlum = []
+    
+    for file_no in range(800,1300,2):
+        pickle_path = "data-float32/SILCC_hdf5_plt_cnt_"+str(file_no).zfill(4)+"-r0150-"+cd+"-data-float32.pkl"
+        #pickle_path2 = "data-float32/SILCC_hdf5_plt_cnt_"+str(file_no).zfill(4)+"-r0150-c000050-data-float32.pkl"
+
+        t, L = _read(pickle_path)
+        global_times.append(t)
+        global_Xlum.append(L)
+
+    ax.semilogy(global_times, global_Xlum, label=label, color = colors[i])
+
 ax.legend()
+ax.set_xlabel("time (Myr)")
+ax.set_ylabel("L_X (erg/s)")
 fig.savefig("total-Xlumi-all-files.pdf", bbox_inches="tight")
