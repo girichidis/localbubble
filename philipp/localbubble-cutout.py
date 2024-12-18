@@ -1,12 +1,33 @@
+# script to cut out the LB, which is first placed in the center
+# Radius enlarges with time according to Mathis' analysis
+
+# Philipp Girichidis, 16.12.2024
+
 import numpy as np
 import yt
+import argparse
+import os
 
 # define center of the bubble (in pc)
 cx = -80.
 cy = -150.
 cz = 0.0
 
-for files in ["SILCC_hdf5_plt_cnt_1080"]:
+outputpath = "figures-LB-cutout"
+
+parser = argparse.ArgumentParser(description='cmd line args')
+parser.add_argument('files', nargs='+', help='files')
+args = parser.parse_args()
+
+print("trying to create output path")
+if not os.path.exists(outputpath):
+    print("  folder", outputpath, "does not exist, create it!")
+    os.makedirs(outputpath)
+    for f in ["dens_cut1", "dens_cut2", "dens_cut3"]:
+        print("  create subfolders for different cut versions!")
+        os.makedirs(outputpath+"/"+f)
+
+for files in args.files:
     ds = yt.load(files)
 
     # define radius of the bubble (in pc)
@@ -38,7 +59,7 @@ for files in ["SILCC_hdf5_plt_cnt_1080"]:
         return np.sqrt(data[("gas", "xctr")]**2 + data[("gas", "yctr")]**2 + data[("gas", "zctr")]**2)
     ds.add_field(name=("gas", "rctr"), function=_rad_ctr, sampling_type="local", units="", force_override=True)
 
-    slc = yt.SlicePlot(ds, "z", ("gas", "rctr"), center=([cx, cy, cz], "pc")).save()
+    #slc = yt.SlicePlot(ds, "z", ("gas", "rctr"), center=([cx, cy, cz], "pc")).save()
 
     def _dens_cut1(field, data):
         return data["gas", "density"]*(0.5-np.arctan((data["gas", "rctr"]-R)/w)/np.pi)
@@ -54,7 +75,9 @@ for files in ["SILCC_hdf5_plt_cnt_1080"]:
     ds.add_field(name=("gas", "dens_cut3"), function=_dens_cut3, sampling_type="local", units="g*cm**-3", force_override=True)
 
     for f in ["dens_cut1", "dens_cut2", "dens_cut3"]:
-        slc = yt.SlicePlot(ds, "z", ("gas", f), center=([cx, cy, cz], "pc"))
-        slc.set_zlim(("gas", f), 1e-27, 1e-22)
-        slc.save()
+        for dir in ["x", "z"]:
+            slc = yt.SlicePlot(ds, dir, ("gas", f), center=([cx, cy, cz], "pc"))
+            slc.set_zlim(("gas", f), 1e-26, 1e-22)
+            slc.set_cmap(("gas", f), "inferno")
+            slc.save(outputpath+"/"+f+"/"+files+"-"+f+"-"+dir+".png")
 
