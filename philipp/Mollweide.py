@@ -7,6 +7,7 @@ import yt
 import argparse
 from tqdm import tqdm
 import pickle
+from unyt import cm
 
 from astropy import units as u, constants  as c
 
@@ -66,6 +67,13 @@ else:
     c = [0, 0, 0]
 
 
+def _activate_xray_fields(field, data):
+    ds.add_field(('gas', 'H_nuclei_density'), _nuclei_density, sampling_type="local", units="cm**(-3)", force_override=True)
+    ds.add_field(('gas', 'El_number_density'), _nuclei_density, sampling_type="local", units="cm**(-3)", force_override=True)
+    yt.add_xray_emissivity_field(ds, 0.1, 2, metallicity=1.0, data_dir=dat_path, table_type="apec")
+    sp = ds.sphere(ctr, (args.radius, "pc"))
+
+
 print("center at (pc) :", cx, cy, cz)
 
 # loop over all files
@@ -88,15 +96,48 @@ for files in args.files:
         return data[("gas", "electron_density")]**2
     ds.add_field(("gas", "electron_density_squared"), function=_electron_density_squared, \
                 sampling_type="local", units="cm**-6", force_override=True)
+    
+    def _electron_density_squared_hot(field, data):
+        return np.where(data[("gas", "temperature")] > 8e5, data[("gas", "electron_density")].v**2, 1e-50) / (cm**6)
+    ds.add_field(("gas", "electron_density_squared_hot"), function=_electron_density_squared_hot, \
+                sampling_type="local", units="cm**-6", force_override=True)
 
-    yt.add_xray_emissivity_field(ds, 0.5, 2, metallicity=1.0, data_dir=dat_path)
+    yt.add_xray_emissivity_field(ds, 0.1, 2, metallicity=1.0, data_dir=dat_path, table_type="apec")
 
     # loop over radii
     #radii = np.linspace(args.rad_min_pc, args.rad_max_pc, args.Nrad_pc)
 
-    # check if sphere or true local bubble from Mathis
-    if True:
-        sp = ds.sphere(c, (args.radius, "pc"))
+    # buffer all fields in separate arrays
+    print("buffer all fields in separate arrays")
+
+    # select different phases for the X-ray luminosity
+    # total luminosity
+    _activate_xray_fields()
+    Ltot = sp[("gas", "xray_luminosity_0.1_2_keV")].copy()
+
+    # fixed number density
+    def _nuclei_density(field, data):
+        return args.fixed_n / (cm**3)
+    _activate_xray_fields()
+    Lfix = sp[("gas", "xray_luminosity_0.1_2_keV")].copy()
+
+    # only hot gas
+    def _nuclei_density(field, data):
+        return np.where(data[("gas", "temperature")] > 8e5, \
+                        data[("gas", "number_density")].v * data[("flash", "ihp ")], \
+                        1e-50) / (cm**3)
+    _activate_xray_fields()
+    Lhot = sp[("gas", "xray_luminosity_0.1_2_keV")].copy()
+
+    # hot and fixed number density
+    def _nuclei_density(field, data):
+        return np.where(data[("gas", "temperature")] > 8e5, \
+                        args.fixed_n, \
+                        1e-50) / (cm**3)
+    _activate_xray_fields()
+    Lhotfix = sp[("gas", "xray_luminosity_0.1_2_keV")].copy()
+
+
 
     print()
     print("min and max positions of the selected region")
@@ -125,13 +166,22 @@ for files in args.files:
     # create three healpix maps
     print("create healpix maps for coldens, Xraylum, Xrayflx, emmeasure, radius with nside", nside, "and NPIX", hp.nside2npix(nside))
     NPIX = hp.nside2npix(nside)
-    coldens_map = np.zeros(NPIX) # column density
-    coldens_map2 = np.zeros(NPIX) # check column density
-    Xraylum_map = np.zeros(NPIX) # X-ray luminosity
-    Xrayflx_map = np.zeros(NPIX) # X-ray flux
-    emmeasure_map = np.zeros(NPIX) # emission measure
-    radius_map  = np.zeros(NPIX) # radius
-    bubble_open_map  = np.zeros(NPIX) # map to check if the bubble is open
+    coldens_map     = np.zeros(NPIX) # column density
+    coldens_map2    = np.zeros(NPIX) # check column density
+
+    Xraylum_map     = np.zeros(NPIX) # X-ray luminosity (full luminosity)
+    Xrayflx_map     = np.zeros(NPIX) # X-ray flux
+    Xraylumhot_map  = np.zeros(NPIX) # X-ray luminosity (hot gas)
+    Xrayflxhot_map  = np.zeros(NPIX) # X-ray flux
+    Xraylumfixn_map = np.zeros(NPIX) # X-ray luminosity (fixed number density)
+    Xrayflxfixn_map = np.zeros(NPIX) # X-ray flux
+    Xraylumhfn_map  = np.zeros(NPIX) # X-ray luminosity (hot gas, fixed number density)
+    Xrayflxhfn_map  = np.zeros(NPIX) # X-ray flux
+    emmeasure_map   = np.zeros(NPIX) # emission measure
+    EM_hot_map      = np.zeros(NPIX) # map for emission measure of hot gas (T>8e5K)
+
+    radius_map      = np.zeros(NPIX) # radius
+    bubble_open_map = np.zeros(NPIX) # map to check if the bubble is open
 
     # create a mask for the pixels with "pix" and check if the column density is less than Sigma_crit
     idxmap = np.zeros(NPIX, dtype=bool)
@@ -159,9 +209,16 @@ for files in args.files:
     angle = np.arctan2(R, rad_ctr)
 
     total_mass = 0.0
+    total_volu = 0.0
+
     total_lumi = 0.0
     total_flux = 0.0
-    total_volu = 0.0
+    total_lumi_hot = 0.0
+    total_flux_hot = 0.0
+    total_lumi_fixn = 0.0
+    total_flux_fixn = 0.0
+    total_lumi_hfn = 0.0
+    total_flux_hfn = 0.0
 
     # sort cells based on radius
     idx = np.argsort(rad_ctr)
@@ -188,14 +245,31 @@ for files in args.files:
             # fill the maps
             radius_map[idx2]     = rad_ctr[idx[i]]
             coldens_map[idx2]   += sp[("gas", "cell_mass")][idx[i]].v / (np.pi*(R[idx[i]]*pc)**2) / len(pix)
-            Xraylum_map[idx2]   += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v / len(pix)
-            Xrayflx_map[idx2]   += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v / len(pix) / (4. * np.pi * rad_ctr[idx[i]]**2)
+
+            Xraylum_map[idx2]     += Ltot[idx[i]].v / len(pix)
+            Xrayflx_map[idx2]     += Ltot[idx[i]].v / len(pix) / (4. * np.pi * rad_ctr[idx[i]]**2)
+            Xraylumhot_map[idx2]  += Lhot[idx[i]].v / len(pix)
+            Xrayflxhot_map[idx2]  += Lhot[idx[i]].v / len(pix) / (4. * np.pi * rad_ctr[idx[i]]**2)
+            Xraylumfixn_map[idx2] += Lfix[idx[i]].v / len(pix)
+            Xrayflxfixn_map[idx2] += Lfix[idx[i]].v / len(pix) / (4. * np.pi * rad_ctr[idx[i]]**2)
+            Xraylumhfn_map[idx2]  += Lhotfix[idx[i]].v / len(pix)
+            Xrayflxhfn_map[idx2]  += Lhotfix[idx[i]].v / len(pix) / (4. * np.pi * rad_ctr[idx[i]]**2)
+
             emmeasure_map[idx2] += sp[("gas", "electron_density_squared")][idx[i]].v * dx[idx[i]]
+            EM_hot_map[idx2]    += sp[("gas", "electron_density_squared_hot")][idx[i]].v * dx[idx[i]]
 
             f_idx_pix   = len(idx2[0]) / len(pix)
             total_mass += sp[("gas", "cell_mass")][idx[i]].v * f_idx_pix
-            total_lumi += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v * f_idx_pix
-            total_flux += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v * f_idx_pix / (4. * np.pi * rad_ctr[idx[i]]**2)
+
+            total_lumi      += Ltot[idx[i]].v * f_idx_pix
+            total_flux      += Ltot[idx[i]].v * f_idx_pix / (4. * np.pi * rad_ctr[idx[i]]**2)
+            total_lumi_hot  += Lhot[idx[i]].v * f_idx_pix
+            total_flux_hot  += Lhot[idx[i]].v * f_idx_pix / (4. * np.pi * rad_ctr[idx[i]]**2)
+            total_lumi_fixn += Lfix[idx[i]].v * f_idx_pix
+            total_flux_fixn += Lfix[idx[i]].v * f_idx_pix / (4. * np.pi * rad_ctr[idx[i]]**2)
+            total_lumi_hfn  += Lhotfix[idx[i]].v * f_idx_pix
+            total_flux_hfn  += Lhotfix[idx[i]].v * f_idx_pix / (4. * np.pi * rad_ctr[idx[i]]**2)
+
             total_volu += volu[idx[i]] * f_idx_pix
 
         else:
@@ -203,13 +277,29 @@ for files in args.files:
             radius_map[:]     = args.rad_res
             coldens_map[:]   += sp[("gas", "cell_mass")][idx[i]].v / NPIX / (4. * np.pi * (args.rad_res*pc)**2)
             coldens_map2[:]  += sp[("gas", "cell_mass")][idx[i]].v / NPIX / (4. * np.pi * (args.rad_res*pc)**2)
-            Xraylum_map[:]   += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v / NPIX
-            Xrayflx_map[:]   += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v / NPIX / (4. * np.pi * args.rad_res**2)
-            emmeasure_map[:] += sp[("gas", "electron_density_squared")][idx[i]].v * dx[idx[i]]
 
-            total_mass += sp[("gas", "cell_mass")][idx[i]].v
-            total_lumi += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v
-            total_flux += sp[("gas", "xray_luminosity_0.5_2_keV")][idx[i]].v / (4. * np.pi * args.rad_res**2)
+            Xraylum_map[:]     += Ltot[idx[i]].v / NPIX
+            Xrayflx_map[:]     += Ltot[idx[i]].v / NPIX / (4. * np.pi * args.rad_res**2)
+            Xraylumhot_map[:]  += Lhot[idx[i]].v / NPIX
+            Xrayflxhot_map[:]  += Lhot[idx[i]].v / NPIX / (4. * np.pi * args.rad_res**2)
+            Xraylumfixn_map[:] += Lfix[idx[i]].v / NPIX
+            Xrayflxfixn_map[:] += Lfix[idx[i]].v / NPIX / (4. * np.pi * args.rad_res**2)
+            Xraylumhfn_map[:]  += Lhotfix[idx[i]].v / NPIX
+            Xrayflxhfn_map[:]  += Lhotfix[idx[i]].v / NPIX / (4. * np.pi * args.rad_res**2)
+
+            emmeasure_map[:] += sp[("gas", "electron_density_squared")][idx[i]].v * dx[idx[i]]
+            EM_hot_map[:]    += sp[("gas", "electron_density_squared_hot")][idx[i]].v * dx[idx[i]]
+
+            total_mass      += sp[("gas", "cell_mass")][idx[i]].v
+            total_lumi      += Ltot[idx[i]].v
+            total_flux      += Ltot[idx[i]].v / (4. * np.pi * args.rad_res**2)
+            total_lumi_hot  += Lhot[idx[i]].v
+            total_flux_hot  += Lhot[idx[i]].v / (4. * np.pi * args.rad_res**2)
+            total_lumi_fixn += Lfix[idx[i]].v
+            total_flux_fixn += Lfix[idx[i]].v / (4. * np.pi * args.rad_res**2)
+            total_lumi_hfn  += Lhotfix[idx[i]].v
+            total_flux_hfn  += Lhotfix[idx[i]].v / (4. * np.pi * args.rad_res**2)
+
             total_volu += volu[idx[i]]
 
    # bubble open map
@@ -224,9 +314,12 @@ for files in args.files:
     data["simtime"] = ds.current_time.v
     data["simtime_Myr"] = ds.current_time.in_units("Myr").v
 
-    for name, field, norm in zip(["coldens", "coldens2", "Xraylum", "Xrayflx", "emmeasure", "radius", "bubble_open"], \
-                            [coldens_map, coldens_map2, Xraylum_map, Xrayflx_map, emmeasure_map, radius_map, bubble_open_map], \
-                            [True, True, True, True, True, False, False]):
+    
+    for name, field, norm in zip(["coldens", "coldens2", "Xraylum", "Xrayflx", "Xraylum_hot", "Xrayflx_hot", "Xraylum_fixn", "Xrayflx_fixn", \
+        "Xraylum_hfn", "Xrayflx_hfn", "emmeasure", "radius", "bubble_open", "EM_hot"], \
+                            [coldens_map, coldens_map2, Xraylum_map, Xrayflx_map, Xraylumhot_map, Xrayflxhot_map, Xraylumfixn_map, Xrayflxfixn_map, \
+                                Xraylumhfn_map, Xrayflxhfn_map, emmeasure_map, radius_map, bubble_open_map, EM_hot_map], \
+                            [True, True, True, True, True, True, True, True, True, True, True, False, False, True]):
 
         fig = plt.figure(figsize=(10, 5))
         if norm:
