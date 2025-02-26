@@ -9,13 +9,13 @@ from tqdm import tqdm
 import pickle
 from unyt import cm
 
-from astropy import units as u, constants  as c
+from astropy import units as u, constants  as cc
 
-pc = c.pc.cgs.value
-kB  = c.k_B.cgs.value
-Msun = c.M_sun.cgs.value
-G = c.G.cgs.value
-Myr = u.Myr.in_units("s")
+pc   = cc.pc.cgs.value
+kB   = cc.k_B.cgs.value
+Msun = cc.M_sun.cgs.value
+G    = cc.G.cgs.value
+Myr  = u.Myr.in_units("s")
 
 # Macbook
 dat_path = "/Users/girichidis/Physics/Tables/yt-python/"
@@ -39,6 +39,8 @@ parser.add_argument('-odir', help='output directory', default=".", type=str)
 parser.add_argument('-odir_data', help='output directory for data files', default="", type=str)
 
 parser.add_argument('-Sigma_crit', help='max critical coldens', default=1e20, type=float)
+
+parser.add_argument('-fixed_n', help='fixed number density', default=0.01, type=float)
 
 args = parser.parse_args()
 
@@ -67,11 +69,11 @@ else:
     c = [0, 0, 0]
 
 
-def _activate_xray_fields(field, data):
+def _activate_xray_fields():
     ds.add_field(('gas', 'H_nuclei_density'), _nuclei_density, sampling_type="local", units="cm**(-3)", force_override=True)
     ds.add_field(('gas', 'El_number_density'), _nuclei_density, sampling_type="local", units="cm**(-3)", force_override=True)
     yt.add_xray_emissivity_field(ds, 0.1, 2, metallicity=1.0, data_dir=dat_path, table_type="apec")
-    sp = ds.sphere(ctr, (args.radius, "pc"))
+    return ds.sphere(c, (args.radius, "pc"))
 
 
 print("center at (pc) :", cx, cy, cz)
@@ -102,7 +104,7 @@ for files in args.files:
     ds.add_field(("gas", "electron_density_squared_hot"), function=_electron_density_squared_hot, \
                 sampling_type="local", units="cm**-6", force_override=True)
 
-    yt.add_xray_emissivity_field(ds, 0.1, 2, metallicity=1.0, data_dir=dat_path, table_type="apec")
+    #yt.add_xray_emissivity_field(ds, 0.1, 2, metallicity=1.0, data_dir=dat_path, table_type="apec")
 
     # loop over radii
     #radii = np.linspace(args.rad_min_pc, args.rad_max_pc, args.Nrad_pc)
@@ -112,13 +114,13 @@ for files in args.files:
 
     # select different phases for the X-ray luminosity
     # total luminosity
-    _activate_xray_fields()
+    sp = _activate_xray_fields()
     Ltot = sp[("gas", "xray_luminosity_0.1_2_keV")].copy()
 
     # fixed number density
     def _nuclei_density(field, data):
         return args.fixed_n / (cm**3)
-    _activate_xray_fields()
+    sp = _activate_xray_fields()
     Lfix = sp[("gas", "xray_luminosity_0.1_2_keV")].copy()
 
     # only hot gas
@@ -126,7 +128,7 @@ for files in args.files:
         return np.where(data[("gas", "temperature")] > 8e5, \
                         data[("gas", "number_density")].v * data[("flash", "ihp ")], \
                         1e-50) / (cm**3)
-    _activate_xray_fields()
+    sp = _activate_xray_fields()
     Lhot = sp[("gas", "xray_luminosity_0.1_2_keV")].copy()
 
     # hot and fixed number density
@@ -134,7 +136,7 @@ for files in args.files:
         return np.where(data[("gas", "temperature")] > 8e5, \
                         args.fixed_n, \
                         1e-50) / (cm**3)
-    _activate_xray_fields()
+    sp = _activate_xray_fields()
     Lhotfix = sp[("gas", "xray_luminosity_0.1_2_keV")].copy()
 
 
@@ -315,10 +317,12 @@ for files in args.files:
     data["simtime_Myr"] = ds.current_time.in_units("Myr").v
 
     
-    for name, field, norm in zip(["coldens", "coldens2", "Xraylum", "Xrayflx", "Xraylum_hot", "Xrayflx_hot", "Xraylum_fixn", "Xrayflx_fixn", \
-        "Xraylum_hfn", "Xrayflx_hfn", "emmeasure", "radius", "bubble_open", "EM_hot"], \
-                            [coldens_map, coldens_map2, Xraylum_map, Xrayflx_map, Xraylumhot_map, Xrayflxhot_map, Xraylumfixn_map, Xrayflxfixn_map, \
-                                Xraylumhfn_map, Xrayflxhfn_map, emmeasure_map, radius_map, bubble_open_map, EM_hot_map], \
+    for name, field, norm in zip(["coldens", "coldens2", "Xraylum", "Xrayflx", \
+                                  "Xraylum_hot", "Xrayflx_hot", "Xraylum_fixn", "Xrayflx_fixn", \
+                                  "Xraylum_hfn", "Xrayflx_hfn", "emmeasure", "radius", "bubble_open", "EM_hot"], \
+                            [coldens_map, coldens_map2, Xraylum_map, Xrayflx_map, \
+                             Xraylumhot_map, Xrayflxhot_map, Xraylumfixn_map, Xrayflxfixn_map, \
+                             Xraylumhfn_map, Xrayflxhfn_map, emmeasure_map, radius_map, bubble_open_map, EM_hot_map], \
                             [True, True, True, True, True, True, True, True, True, True, True, False, False, True]):
 
         fig = plt.figure(figsize=(10, 5))

@@ -8,12 +8,12 @@ import argparse
 from tqdm import tqdm
 import pickle
 
-from astropy import units as u, constants  as c
+from astropy import units as u, constants  as cc
 
-pc = c.pc.cgs.value
-kB  = c.k_B.cgs.value
-Msun = c.M_sun.cgs.value
-G = c.G.cgs.value
+pc = cc.pc.cgs.value
+kB  = cc.k_B.cgs.value
+Msun = cc.M_sun.cgs.value
+G = cc.G.cgs.value
 Myr = u.Myr.in_units("s")
 
 # Macbook
